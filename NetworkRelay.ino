@@ -8,8 +8,11 @@
   Author:    Vassilis Serasidis
     Home:    http://www.serasidis.gr
    email:    avrsite@yahoo.gr, info@serasidis.gr
- Version:    0.2
- Updated:    06 Sept 2014
+ Version:    0.3
+ Updated:    22 Sept 2014
+ 
+ v0.3 (22 Sept 2014)
+   ** Changed the incomming buffer type (serialData) from String to char[RX_BUFFER_LENGTH] for memory currupt protection (buffer overflow).
  
  -= Commands =-
   1*           asks for humidity, temperature, relay status and switch status (0=OFF, 1=ON)
@@ -38,9 +41,11 @@
 
   -= Connections =-
   Arduino pin:   Usage:
+       2         Is connected the AM2302 Humidity / Temperaturee sensor. 
        7         button for restoring the password to '1234'
        8         Input switch. On that pin is connected the optocoupler K814P.
        9         Is connected the 12V DC relay through BC547 transistor. Relay is for driving electrical devices (motors, water pumps, adsl routers etc).
+ 
   
   This software is distributed under the GNU General Public License v3.0 http://www.gnu.org/copyleft/gpl.html
   
@@ -49,9 +54,10 @@
 #define TIMEOUT1 20000 //5 seconds timout
 #define RELAY  9
 #define SWITCH 8
-#define DEFAULT_SETTINGS  7
+#define DEFAULT_SETTINGS_PIN  7
 #define BUFFER_LENGTH 30
-
+#define RX_BUFFER_LENGTH 40 //Receiver buffer length
+#define ETHERNET_PORT 10000
 
 #include <SPI.h>
 //#include <Ethernet.h>  //Select this line for using the stock ethernet library (W5100 ethernet module),
@@ -74,20 +80,18 @@ boolean switchStatusBackup = false;
 
 boolean stringComplete = false;
 String password;
-String serialData = "";
+char serialData[RX_BUFFER_LENGTH];
 unsigned char byteCounter;
 
 // Enter a MAC address and IP address for your controller below.
 // The IP address will be dependent on your local network:
-byte mac[] = {
-  0xDE, 0xAD, 0xBE, 0xEF, 0xEE, 0xED
-};
+byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xEE, 0xED};
 IPAddress ip(192, 168, 1, 240);
 
 // Initialize the Ethernet client library
 // with the IP address and port of the server
 // that you want to connect to (port 23 is default for telnet;
-EthernetServer server(10000);
+EthernetServer server(ETHERNET_PORT);
 DHT dht;
 
 
@@ -96,8 +100,8 @@ void setup() {
   unsigned char eepromData;
   pinMode(RELAY, OUTPUT);
   pinMode(SWITCH, INPUT);
-  pinMode(DEFAULT_SETTINGS, INPUT);
-  digitalWrite(DEFAULT_SETTINGS, HIGH); //Enabler internal pull-up resistor.
+  pinMode(DEFAULT_SETTINGS_PIN, INPUT);
+  digitalWrite(DEFAULT_SETTINGS_PIN, HIGH); //Enabler internal pull-up resistor.
   
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
@@ -107,10 +111,21 @@ void setup() {
   
   // start the Ethernet connection:
   Ethernet.begin(mac, ip);
-
+  
   // start listening for clients
   server.begin();
   
+  Serial.println(F("*********************************"));
+  Serial.println(F("    Arduino network relay"));
+  Serial.println(F(" (c) 2014 by Vassilis Serasidis"));
+  Serial.println(F("     http://www.serasidis.gr"));
+  Serial.println(F("*********************************\n\n"));
+  Serial.print(F("Ethernet server has been started\n  IP: "));
+  Serial.print(Ethernet.localIP());
+  Serial.print(F("\nPort: "));
+  Serial.println(ETHERNET_PORT);
+
+
   if (EEPROM.read(0) == 0xff)  //If EEPROM is empty, write the default ASCII password '1234' in eeprom.
   {
     for(i=0;i<4;i++)
@@ -126,7 +141,7 @@ void setup() {
     char passwd = EEPROM.read(i);
     password += passwd;
   }
-  //Serial.print(password); //Show on serial port the password.
+  //Serial.print(password); //Show the password on serial port .
   
   // give the Ethernet shield a second to initialize:
   delay(1000);
@@ -137,18 +152,18 @@ void loop()
     checkForClient();
     timer4 = millis();
     
-    while(digitalRead(DEFAULT_SETTINGS) == LOW) // Restore factory default password '1234'.
+    while(digitalRead(DEFAULT_SETTINGS_PIN) == LOW) // Restore factory default password '1234'.
     {
       if(millis() > timer4 + 3000)
       {
-        Serial.println("Restore the default password '1234'. Change it as soon as possible");
+        Serial.println(F("Restore the default password '1234'. Change it as soon as possible"));
         EEPROM.write(0,'1');
         EEPROM.write(1,'2');
         EEPROM.write(2,'3');
         EEPROM.write(3,'4');
         EEPROM.write(4,0); //Terminal character
         password = "1234";
-        while(digitalRead(DEFAULT_SETTINGS) == LOW)
+        while(digitalRead(DEFAULT_SETTINGS_PIN) == LOW)
           delay(200);
       }      
     }
@@ -185,18 +200,22 @@ void checkForClient()
         {
            char inData = client.read();
 
-           if (inData != '*')
+           if ((inData != '*') && ( byteCounter < (RX_BUFFER_LENGTH - 1)))
            {
-             serialData += inData; 
-             byteCounter++;
+             serialData[byteCounter++] = inData; 
            }
-           else
+           else if ((inData == '*') && ( byteCounter <= (RX_BUFFER_LENGTH - 1)))
            {
-             serialData += '*';
+             serialData[byteCounter] = '*'; //Put terminal character on RX buffer.
              checkIncomingData(byteCounter);
-             serialData = "";
              byteCounter = 0;
-           }         
+           }
+           else if(byteCounter == (RX_BUFFER_LENGTH - 1))
+           {
+             Serial.print(millis());
+             Serial.println(F("- Incomming data Overflow"));
+             byteCounter = 0;
+           }            
             //Serial.write(inData);
             timer3 = millis();
         } 
@@ -219,7 +238,6 @@ void checkForClient()
 //======================================================
 void getValuesFromSensor()
 {
-  digitalWrite(5, HIGH);
   float humidity = dht.getHumidity();
   float temperature = dht.getTemperature(); 
   server.print("h"); 
@@ -231,8 +249,6 @@ void getValuesFromSensor()
     server.println("1");
   else
     server.println("0");
-  
-  digitalWrite(5, LOW);
 }
 
 //======================================================
