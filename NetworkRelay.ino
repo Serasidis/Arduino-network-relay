@@ -13,6 +13,7 @@
  
  v1.01 (22 Sept 2014)
    ** Changed the incomming buffer type (serialData) from String to char[RX_BUFFER_LENGTH] for memory currupt protection (buffer overflow).
+   ** The password length was limited to 4 characters. Increased up to 16 characters.
  
  -= Commands =-
   1*           asks for humidity, temperature, relay status and switch status (0=OFF, 1=ON)
@@ -67,17 +68,16 @@
 #include <EEPROM.h>
 
 unsigned long timer1 = 0;
-unsigned long timer2 = 0;
+//unsigned long timer2 = 0;
 unsigned long timer3 = 0;
 unsigned long timer4 = 0;
 
-boolean alreadyConnected = false; // whether or not the client was connected previously
-boolean connectionTIMEOUT1 = false;
+//boolean connectionTIMEOUT1 = false;
 boolean relayStatus = false;
 boolean switchStatus = false;
 boolean switchStatusBackup = false;
 
-boolean stringComplete = false;
+//boolean stringComplete = false;
 String password;
 char serialData[RX_BUFFER_LENGTH];
 unsigned char byteCounter;
@@ -135,10 +135,13 @@ void setup() {
   i=0;
   password = "";
   //Read the password from EEPROM and store it to 'password' string.
-  for(i=0;i<4;i++)
+  for(i=0;i<16;i++)
   {
     char passwd = EEPROM.read(i);
-    password += passwd;
+    if (passwd != 0)
+      password += passwd;
+    else
+      break;
   }
   //Serial.print(password); //Show the password on serial port .
   
@@ -325,6 +328,7 @@ void checkIncomingData(unsigned char stringLength)
           password = newPassword; //Change password to the new one.
           for (i=0;i<password.length();i++)  //Read the password from EEPROM and store it to variable 'pin'
             EEPROM.write(i,password[i]);
+          EEPROM.write(password.length(), 0);  //Write on EEPROM the terminal character.
         }
       }
       else
