@@ -8,10 +8,10 @@
   Author:    Vassilis Serasidis
     Home:    http://www.serasidis.gr
    email:    avrsite@yahoo.gr, info@serasidis.gr
- Version:    0.3
+ Version:    1.01
  Updated:    22 Sept 2014
  
- v0.3 (22 Sept 2014)
+ v1.01 (22 Sept 2014)
    ** Changed the incomming buffer type (serialData) from String to char[RX_BUFFER_LENGTH] for memory currupt protection (buffer overflow).
  
  -= Commands =-
