@@ -55,7 +55,6 @@
 #define RELAY  9
 #define SWITCH 8
 #define DEFAULT_SETTINGS_PIN  7
-#define BUFFER_LENGTH 30
 #define RX_BUFFER_LENGTH 40 //Receiver buffer length
 #define ETHERNET_PORT 10000
 
